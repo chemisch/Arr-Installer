@@ -1,0 +1,105 @@
+###############################################################################
+#####            Volumes replace USER with your local User account        #####
+##### Don't forget about the wiregaurd private key. Instructions provided #####
+###############################################################################
+
+version: "3"
+services:
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    # See https://github.com/qdm12/gluetun-wiki/blob/main/setup/connect-a-container-to-gluetun.md#external-container-to-gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 6881:6881
+      - 6881:6881/udp
+      - 8085:8085 # qbittorrent
+      - 8989:8989 # Sonarr
+      - 9696:9696 # Prowlarr
+    volumes:
+      - /home/bey/arr-stack:/gluetun
+    environment:
+      # See https://github.com/qdm12/gluetun-wiki/tree/main/setup#setup
+      - VPN_SERVICE_PROVIDER=nordvpn
+      - VPN_TYPE=wireguard
+      # OpenVPN:
+      # - OPENVPN_USER=
+      # - OPENVPN_PASSWORD=
+      # Wireguard:
+      - WIREGUARD_PRIVATE_KEY=uKGXXXXXXXXXXXXXXXXXXTg3LWInA= # See https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/nordvpn.md#obtain-your-wireguard-private-key
+      - WIREGUARD_ADDRESSES=10.5.0.2/32
+      # Timezone for accurate log times
+      - TZ=America/Los_Angeles
+      # Server list updater
+      # See https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#update-the-vpn-servers-list
+      - UPDATER_PERIOD=24h
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=1000   #standard ID's for first User created. Adjust if nessecary.
+      - PGID=1000   #standard ID's for first User created. Adjust if nessecary.
+      - TZ=America/Los_Angeles
+      - WEBUI_PORT=8085
+    volumes:
+      - /home/USER/arr-stack/qbittorrent:/config
+      - /home/USER/arr-stack/qbittorrent/downloads:/downloads
+    depends_on:
+      - gluetun
+    restart: always
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=1000   #standard ID's for first User created. Adjust if nessecary.
+      - PGID=1000   #standard ID's for first User created. Adjust if nessecary.
+      - TZ=America/Los_Angeles
+    volumes:
+      - /home/USER/arr-stack/sonarr/data:/config
+      - /home/USER/arr-stack/sonarr/tvseries:/tv #optional
+      - /home/USER/arr-stack/sonarr/downloadclient-downloads:/downloads #optional
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    network_mode: "service:gluetun"
+    environment:
+      - PUID=1000   #standard ID's for first User created. Adjust if nessecary.
+      - PGID=1000   #standard ID's for first User created. Adjust if nessecary.
+      - TZ=America/Los_Angeles
+    volumes:
+      - /home/USER/arr-stack/prowlarr/data:/config
+    restart: unless-stopped
+
+  homarr:
+    container_name: homarr
+    image: ghcr.io/ajnart/homarr:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Optional, only if you want docker integration
+      - /home/USER/homarr/configs:/app/data/configs   
+      - /home/USER/homarr/icons:/app/public/icons
+      - /home/USER/homarr/data:/data
+    ports:
+      - '7575:7575'
+
+  filebrowser:
+    image: filebrowser/filebrowser:s6
+    container_name: filebrowser
+    volumes:
+      - /home:/srv #Change to match your directory
+      - /home/USER/filebrowser/filebrowser.db:/database/filebrowser.db #Change to match your directory
+      - /home/USER/filebrowser/settings.json:/config/settings.json #Change to match your directory
+    environment:
+      - PUID=1000  #standard ID's for first User created. Adjust if nessecary.
+      - PGID=1000  #standard ID's for first User created. Adjust if nessecary.
+    ports:
+      - 8095:80 
